@@ -1,0 +1,22 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: api-gateway
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # JWKS auth-service — публичный ключ для проверки подписи access-JWT.
+          jwk-set-uri: ${GATEWAY_JWT_JWK_SET_URI:http://localhost:8081/oauth2/jwks}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true

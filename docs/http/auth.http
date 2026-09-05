@@ -1,0 +1,73 @@
+### Регистрация
+POST http://localhost:8081/auth/register
+Content-Type: application/json
+
+{
+  "email": "client@example.com",
+  "password": "P@ssw0rd123",
+  "locale": "ru"
+}
+
+### Код смотри в логе auth-service (LoggingOtpSender), подставь ниже
+POST http://localhost:8081/auth/otp/verify
+Content-Type: application/json
+
+{
+  "target": "client@example.com",
+  "purpose": "registration",
+  "code": "000000"
+}
+
+### Профиль (подставь accessToken из ответа выше)
+GET http://localhost:8081/auth/me
+Authorization: Bearer PASTE_ACCESS_TOKEN
+
+### Логин по паролю
+POST http://localhost:8081/auth/login
+Content-Type: application/json
+
+{
+  "login": "client@example.com",
+  "password": "P@ssw0rd123"
+}
+
+### Ротация refresh
+POST http://localhost:8081/auth/token/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "PASTE_REFRESH_TOKEN"
+}
+
+### Logout
+POST http://localhost:8081/auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "PASTE_REFRESH_TOKEN"
+}
+
+### JWKS
+GET http://localhost:8081/oauth2/jwks
+
+### 1. Получить SSO-токен от mock-mlm
+GET http://localhost:9100/sso/issue-token?mlm_user_id=U1&upline_id=U0&access_status=access_paid
+
+### 2. Обменять на наш JWT (подставь token из ответа выше)
+POST http://localhost:8081/auth/sso/mlm
+Content-Type: application/json
+
+{
+  "token": "PASTE_MLM_SSO_TOKEN"
+}
+
+### Служебное создание пользователя (для catalog/courier)
+POST http://localhost:8081/internal/auth/users
+Content-Type: application/json
+X-Internal-Token: local-dev-internal-token-change-me
+
+{
+  "email": "shop-owner@example.com",
+  "role": "CLIENT_EXTERNAL",
+  "status": "active"
+}

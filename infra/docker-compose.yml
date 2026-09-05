@@ -1,0 +1,109 @@
+# Полный прогон: инфраструктура + все сервисы в контейнерах.
+# Образы собираются buildpack'ами:  ./mvnw -DskipTests spring-boot:build-image
+# Запуск:  docker compose -f infra/docker-compose.yml up -d
+
+name: gem
+
+x-service-env: &service-env
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  SPRING_DATASOURCE_USERNAME: gem
+  SPRING_DATASOURCE_PASSWORD: gem
+  SPRING_DATA_REDIS_HOST: redis
+
+x-depends: &service-depends
+  postgres:
+    condition: service_healthy
+  kafka:
+    condition: service_started
+
+services:
+  postgres:
+    extends:
+      file: docker-compose.infra.yml
+      service: postgres
+  kafka:
+    extends:
+      file: docker-compose.infra.yml
+      service: kafka
+  redis:
+    extends:
+      file: docker-compose.infra.yml
+      service: redis
+  mailhog:
+    extends:
+      file: docker-compose.infra.yml
+      service: mailhog
+  mock-mlm:
+    extends:
+      file: docker-compose.infra.yml
+      service: mock-mlm
+
+  api-gateway:
+    image: green-eco-mall/api-gateway:latest
+    environment:
+      SERVER_PORT: "8080"
+      GATEWAY_JWT_JWK_SET_URI: http://auth-service:8081/oauth2/jwks
+    ports: ["8080:8080"]
+    depends_on: *service-depends
+
+  auth-service:
+    image: green-eco-mall/auth-service:latest
+    environment:
+      <<: *service-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth
+    ports: ["8081:8081"]
+    depends_on: *service-depends
+
+  catalog-service:
+    image: green-eco-mall/catalog-service:latest
+    environment:
+      <<: *service-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/catalog
+    ports: ["8082:8082"]
+    depends_on: *service-depends
+
+  order-service:
+    image: green-eco-mall/order-service:latest
+    environment:
+      <<: *service-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/orders
+    ports: ["8083:8083"]
+    depends_on: *service-depends
+
+  finance-service:
+    image: green-eco-mall/finance-service:latest
+    environment:
+      <<: *service-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/finance
+    ports: ["8084:8084"]
+    depends_on: *service-depends
+
+  courier-service:
+    image: green-eco-mall/courier-service:latest
+    environment:
+      <<: *service-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/courier
+    ports: ["8085:8085"]
+    depends_on: *service-depends
+
+  mlm-service:
+    image: green-eco-mall/mlm-service:latest
+    environment:
+      <<: *service-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mlm
+      MLM_EXTERNAL_BASE_URL: http://mock-mlm:9100
+    ports: ["8086:8086"]
+    depends_on: *service-depends
+
+  notification-service:
+    image: green-eco-mall/notification-service:latest
+    environment:
+      <<: *service-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification
+      SPRING_MAIL_HOST: mailhog
+      SPRING_MAIL_PORT: "1025"
+    ports: ["8087:8087"]
+    depends_on: *service-depends
+
+volumes:
+  pgdata:
