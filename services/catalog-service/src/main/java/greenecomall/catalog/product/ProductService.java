@@ -23,6 +23,8 @@ import greenecomall.common.events.EventEnvelope;
 import greenecomall.common.events.EventTypes;
 import greenecomall.common.events.Topics;
 import greenecomall.common.events.payload.CatalogEvents;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -64,6 +66,12 @@ public class ProductService {
         products.save(product);
         stocks.save(new ProductStock(product, 0));
         return product.getId();
+    }
+
+    /** Админ-поиск товаров (например, ждущих модерации). */
+    @Transactional(readOnly = true)
+    public Page<Product> adminSearch(ProductStatus status, UUID shopId, UUID cityId, Pageable pageable) {
+        return products.adminSearch(status, shopId, cityId, pageable);
     }
 
     @Transactional(readOnly = true)

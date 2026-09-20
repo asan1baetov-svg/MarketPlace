@@ -1,9 +1,11 @@
 package greenecomall.catalog.web;
 
+import greenecomall.catalog.domain.Shop;
 import greenecomall.catalog.domain.ShopStatus;
 import greenecomall.catalog.shop.ShopService;
 import greenecomall.catalog.web.dto.ReasonRequest;
 import greenecomall.catalog.web.dto.ShopResponse;
+import greenecomall.common.web.PageResponse;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -28,8 +30,10 @@ public class ShopAdminController {
     }
 
     @GetMapping("/admin/shops")
-    public Page<ShopResponse> list(@RequestParam ShopStatus status, Pageable pageable) {
-        return shopService.listByStatus(status, pageable).map(ShopResponse::from);
+    public PageResponse<ShopResponse> list(@RequestParam ShopStatus status, Pageable pageable) {
+        Page<Shop> page = shopService.listByStatus(status, pageable);
+        return PageResponse.of(page.getContent().stream().map(ShopResponse::from).toList(),
+                page.getNumber(), page.getSize(), page.getTotalElements());
     }
 
     @PostMapping("/admin/shops/{id}/approve")
