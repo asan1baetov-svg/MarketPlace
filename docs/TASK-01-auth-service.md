@@ -1,5 +1,12 @@
 # Задание №1 — auth-service + валидация JWT в api-gateway
 
+> **Статус: выполнено (2026-09-05).** Доменный/сервисный слой и веб-слой (контроллеры, security,
+> JWKS, проверка JWT в api-gateway) реализованы и вручную провалидированы end-to-end (регистрация →
+> OTP → логин → ротация/повторное использование refresh → logout, SSO из mock-mlm + защита от
+> replay, internal-эндпоинты, gateway 401/permitAll). Юнит- и Testcontainers-тесты добавлены.
+> Подробности — `services/auth-service/README.md`, `docs/http/auth.http`. Документ ниже остаётся
+> как справочная спецификация контракта.
+
 **Кому:** backend-коллеге
 **Ветка:** `feature/auth-service`
 **Оценка:** ~5–7 рабочих дней

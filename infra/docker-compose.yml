@@ -9,6 +9,9 @@ x-service-env: &service-env
   SPRING_DATASOURCE_USERNAME: gem
   SPRING_DATASOURCE_PASSWORD: gem
   SPRING_DATA_REDIS_HOST: redis
+  # Сервисы сами проверяют access-JWT по JWKS auth-service и служебный токен на /internal/**
+  GEM_JWT_JWK_SET_URI: http://auth-service:8081/oauth2/jwks
+  GEM_INTERNAL_TOKEN: local-dev-internal-token-change-me
 
 x-depends: &service-depends
   postgres:
@@ -43,6 +46,13 @@ services:
     environment:
       SERVER_PORT: "8080"
       GATEWAY_JWT_JWK_SET_URI: http://auth-service:8081/oauth2/jwks
+      GATEWAY_AUTH_URL: http://auth-service:8081
+      GATEWAY_CATALOG_URL: http://catalog-service:8082
+      GATEWAY_ORDER_URL: http://order-service:8083
+      GATEWAY_FINANCE_URL: http://finance-service:8084
+      GATEWAY_COURIER_URL: http://courier-service:8085
+      GATEWAY_MLM_URL: http://mlm-service:8086
+      GATEWAY_NOTIFICATION_URL: http://notification-service:8087
     ports: ["8080:8080"]
     depends_on: *service-depends
 
@@ -59,6 +69,14 @@ services:
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/catalog
+      ORDER_BASE_URL: http://order-service:8083
+      CATALOG_MEDIA_DIR: /data/media
+      # ИИ для фото и корректуры текста: mock без ключа; для реальной работы — gemini + GEMINI_API_KEY
+      PHOTO_AI_PROVIDER: ${PHOTO_AI_PROVIDER:-mock}
+      PROOFREAD_PROVIDER: ${PROOFREAD_PROVIDER:-mock}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    volumes:
+      - catalog-media:/data/media
     ports: ["8082:8082"]
     depends_on: *service-depends
 
@@ -67,6 +85,7 @@ services:
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/orders
+      CATALOG_BASE_URL: http://catalog-service:8082
     ports: ["8083:8083"]
     depends_on: *service-depends
 
@@ -75,6 +94,7 @@ services:
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/finance
+      MLM_BASE_URL: http://mlm-service:8086
     ports: ["8084:8084"]
     depends_on: *service-depends
 
@@ -91,7 +111,8 @@ services:
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mlm
-      MLM_EXTERNAL_BASE_URL: http://mock-mlm:9100
+      MLM_BACKEND_BASE_URL: http://mock-mlm:9100
+      MLM_SYNC_SHARED_SECRET: local-dev-mlm-shared-secret-change-me
     ports: ["8086:8086"]
     depends_on: *service-depends
 
@@ -100,10 +121,9 @@ services:
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification
-      SPRING_MAIL_HOST: mailhog
-      SPRING_MAIL_PORT: "1025"
     ports: ["8087:8087"]
     depends_on: *service-depends
 
 volumes:
   pgdata:
+  catalog-media:

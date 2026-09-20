@@ -38,10 +38,18 @@ public class MockMlmIdentityProvider implements MlmIdentityProvider {
             throw new IllegalStateException("auth.mlm-sso.shared-secret must be at least "
                     + MIN_SECRET_BYTES + " bytes for HS256");
         }
-        SecretKey key = new SecretKeySpec(secret, "HmacSHA256");
+        MacAlgorithm algorithm = MacAlgorithm.from(cfg.algorithm().toUpperCase());
+        if (algorithm == null) {
+            throw new IllegalStateException("unsupported auth.mlm-sso.algorithm: " + cfg.algorithm());
+        }
+        SecretKey key = new SecretKeySpec(secret, "Hmac" + switch (algorithm) {
+            case HS384 -> "SHA384";
+            case HS512 -> "SHA512";
+            default -> "SHA256";
+        });
 
         NimbusJwtDecoder nimbus = NimbusJwtDecoder.withSecretKey(key)
-                .macAlgorithm(MacAlgorithm.HS256)
+                .macAlgorithm(algorithm)
                 .build();
         nimbus.setJwtValidator(new DelegatingOAuth2TokenValidator<>(List.of(
                 new JwtTimestampValidator(cfg.clockSkew()),

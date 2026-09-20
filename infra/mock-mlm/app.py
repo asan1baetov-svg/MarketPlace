@@ -5,9 +5,14 @@
   GET  /sso/issue-token?mlm_user_id=U1&upline_id=&referral_code=&access_status=access_paid
         -> выдаёт подписанный (HS256, общий секрет) короткоживущий SSO-токен;
            этим токеном фронт/тест «заходит» на маркетплейс.
-  POST /api/marketplace/activation   -> приём статуса активации от маркетплейса (логирует, 200)
-  POST /api/marketplace/purchases    -> приём данных о покупках от маркетплейса (логирует, 200)
+  POST /api/marketplace/activation   -> приём статуса активации от маркетплейса (проверяет подпись, логирует)
+  POST /api/marketplace/purchases    -> приём данных о покупках от маркетплейса (проверяет подпись, логирует)
+  POST /sim/account-status?mlm_user_id=U1&status=ACTIVE
+        -> имитирует событие на стороне MLM (например, оплачен входной взнос через Finik):
+           шлёт подписанный webhook в mlm-service маркетплейса (/webhooks/mlm/account-status)
   GET  /healthz
+
+Подпись обратных вызовов в обе стороны: X-Signature = hex(HMAC-SHA256(secret, X-Timestamp + "." + body)).
 
 Реальный контракт (OIDC / RS256+JWKS, состав claim'ов, аутентификация обратных вызовов)
 согласуется с командой MLM-бэка — см. docs/ARCHITECTURE.md, раздел 5.
@@ -17,6 +22,8 @@ import hashlib
 import hmac
 import json
 import time
+import os
+import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -25,10 +32,15 @@ SECRET = b"local-dev-mlm-shared-secret-change-me"
 ISSUER = "mock-mlm"
 AUDIENCE = "green-eco-mall"
 TTL_SECONDS = 120
+MARKETPLACE_MLM_URL = os.environ.get("MARKETPLACE_MLM_URL", "http://localhost:8086")
 
 
 def _b64(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def sign_body(timestamp: str, body: str) -> str:
+    return hmac.new(SECRET, f"{timestamp}.{body}".encode(), hashlib.sha256).hexdigest()
 
 
 def issue_jwt(claims: dict) -> str:
@@ -79,8 +91,28 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length).decode() if length else ""
         if u.path in ("/api/marketplace/activation", "/api/marketplace/purchases"):
-            print(f"[mock-mlm] {u.path}  <- {body}", flush=True)
+            ts = self.headers.get("X-Timestamp", "")
+            valid = hmac.compare_digest(sign_body(ts, body), self.headers.get("X-Signature", ""))
+            key = self.headers.get("X-Idempotency-Key")
+            print(f"[mock-mlm] {u.path} key={key} signature_valid={valid} <- {body}", flush=True)
+            if not valid:
+                return self._send(401, {"error": "invalid signature"})
             return self._send(200, {"received": True})
+        if u.path == "/sim/account-status":
+            q = parse_qs(u.query)
+            payload = json.dumps({
+                "mlmUserId": q.get("mlm_user_id", ["U1"])[0],
+                "status": q.get("status", ["ACTIVE"])[0],
+            })
+            ts = str(int(time.time()))
+            req = urllib.request.Request(
+                f"{MARKETPLACE_MLM_URL}/webhooks/mlm/account-status", data=payload.encode(), method="POST",
+                headers={"Content-Type": "application/json", "X-Timestamp": ts, "X-Signature": sign_body(ts, payload)})
+            try:
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    return self._send(200, {"sent": payload, "marketplaceStatus": resp.status})
+            except Exception as e:  # noqa: BLE001 — заглушка, показываем ошибку как есть
+                return self._send(502, {"sent": payload, "error": str(e)})
         return self._send(404, {"error": "not found"})
 
     def log_message(self, fmt, *args):  # тише в консоли

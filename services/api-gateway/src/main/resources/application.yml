@@ -20,3 +20,14 @@ management:
     health:
       probes:
         enabled: true
+
+gateway:
+  response-timeout: 30s
+  services:
+    auth: ${GATEWAY_AUTH_URL:http://localhost:8081}
+    catalog: ${GATEWAY_CATALOG_URL:http://localhost:8082}
+    order: ${GATEWAY_ORDER_URL:http://localhost:8083}
+    finance: ${GATEWAY_FINANCE_URL:http://localhost:8084}
+    courier: ${GATEWAY_COURIER_URL:http://localhost:8085}
+    mlm: ${GATEWAY_MLM_URL:http://localhost:8086}
+    notification: ${GATEWAY_NOTIFICATION_URL:http://localhost:8087}

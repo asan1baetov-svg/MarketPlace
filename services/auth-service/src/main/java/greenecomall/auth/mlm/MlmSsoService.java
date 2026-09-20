@@ -99,7 +99,7 @@ public class MlmSsoService {
                 EventEnvelope.of(EventTypes.MLM_USER_LINKED, PRODUCER, Tracing.currentTraceId(),
                         new AuthEvents.MlmUserLinked(
                                 user.getId(), identity.mlmUserId(),
-                                identity.referralCode(), identity.uplineMlmUserId())));
+                                identity.referralCode(), identity.uplineMlmUserId(), identity.accessStatus())));
 
         return new SsoLogin(tokenService.issueFor(user), true);
     }

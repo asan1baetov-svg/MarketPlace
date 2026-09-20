@@ -46,10 +46,11 @@ auth:
     issuer: ${MLM_SSO_ISSUER:mock-mlm}
     audience: ${MLM_SSO_AUDIENCE:green-eco-mall}
     clock-skew: 60s
+    algorithm: ${MLM_SSO_ALGORITHM:HS256}
   outbox:
     poll-interval: 2s
   internal:
-    token: ${AUTH_INTERNAL_TOKEN:local-dev-internal-token-change-me}
+    token: ${AUTH_INTERNAL_TOKEN:${GEM_INTERNAL_TOKEN:local-dev-internal-token-change-me}}
 
 management:
   endpoints:

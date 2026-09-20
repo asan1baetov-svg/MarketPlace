@@ -22,11 +22,19 @@ spring:
     consumer:
       group-id: order-service
       auto-offset-reset: earliest
-      properties:
-        spring.json.trusted.packages: "greenecomall.common.events.*"
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
     producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
       properties:
         enable.idempotence: true
+
+order:
+  catalog-base-url: ${CATALOG_BASE_URL:http://localhost:8082}
+  outbox-poll-interval: 2s
+  reservation-timeout: 15m
+  reservation-sweep-interval: 60s
 
 management:
   endpoints:
@@ -37,3 +45,12 @@ management:
     health:
       probes:
         enabled: true
+
+gem:
+  security:
+    # Общий служебный токен для /internal/** (совпадает у всех сервисов и в auth-service)
+    internal-token: ${GEM_INTERNAL_TOKEN:local-dev-internal-token-change-me}
+    jwt:
+      jwk-set-uri: ${GEM_JWT_JWK_SET_URI:http://localhost:8081/oauth2/jwks}
+      issuer: ${AUTH_JWT_ISSUER:http://localhost:8081}
+      audience: ${AUTH_JWT_AUDIENCE:green-eco-mall}

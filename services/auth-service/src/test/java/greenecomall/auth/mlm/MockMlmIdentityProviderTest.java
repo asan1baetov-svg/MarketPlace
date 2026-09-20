@@ -28,7 +28,7 @@ class MockMlmIdentityProviderTest {
 
     private final MockMlmIdentityProvider provider = new MockMlmIdentityProvider(new AuthProperties(
             null, null, null,
-            new AuthProperties.MlmSso(SECRET, ISSUER, AUDIENCE, Duration.ofSeconds(60)),
+            new AuthProperties.MlmSso(SECRET, ISSUER, AUDIENCE, Duration.ofSeconds(60), null),
             null, null));
 
     @Test

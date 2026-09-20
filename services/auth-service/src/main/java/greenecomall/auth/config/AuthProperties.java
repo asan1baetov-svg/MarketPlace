@@ -19,8 +19,20 @@ public record AuthProperties(Jwt jwt, Refresh refresh, Otp otp, MlmSso mlmSso, O
     public record Otp(Duration ttl, Duration resendInterval, int length) {
     }
 
-    /** Параметры проверки входящего SSO-токена от внешней MLM-системы. */
-    public record MlmSso(String sharedSecret, String issuer, String audience, Duration clockSkew) {
+    /**
+     * Параметры проверки входящего SSO-токена от внешней MLM-системы.
+     *
+     * @param algorithm HMAC-алгоритм подписи (HS256/HS384/HS512). Реальный MLM-бэк подписывает через
+     *                  jjwt {@code Keys.hmacShaKeyFor(secret)}, который выбирает алгоритм по длине ключа —
+     *                  значение должно совпасть с их секретом (см. docs/ARCHITECTURE.md §5)
+     */
+    public record MlmSso(String sharedSecret, String issuer, String audience, Duration clockSkew, String algorithm) {
+
+        public MlmSso {
+            if (algorithm == null || algorithm.isBlank()) {
+                algorithm = "HS256";
+            }
+        }
     }
 
     public record Outbox(Duration pollInterval) {

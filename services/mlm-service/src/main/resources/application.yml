@@ -22,9 +22,11 @@ spring:
     consumer:
       group-id: mlm-service
       auto-offset-reset: earliest
-      properties:
-        spring.json.trusted.packages: "greenecomall.common.events.*"
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
     producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
       properties:
         enable.idempotence: true
 
@@ -37,3 +39,27 @@ management:
     health:
       probes:
         enabled: true
+
+mlm:
+  # Во внешнем MLM-бэке уже есть дерево и начисления — локальные бонусы включать только по согласованию
+  local-bonuses-enabled: ${MLM_LOCAL_BONUSES_ENABLED:false}
+  reminder-days-before-deadline: 3,1
+  deadline-check-interval: 1h
+  outbox-poll-interval: 2s
+  sync:
+    # Пусто = обратная синхронизация выключена, сообщения копятся в mlm_sync_outbox.
+    # Локально: http://localhost:9100 (infra/mock-mlm)
+    base-url: ${MLM_BACKEND_BASE_URL:}
+    shared-secret: ${MLM_SYNC_SHARED_SECRET:local-dev-mlm-shared-secret-change-me}
+    max-attempts: 10
+    initial-backoff: 30s
+    poll-interval: 10s
+
+gem:
+  security:
+    # Общий служебный токен для /internal/** (совпадает у всех сервисов и в auth-service)
+    internal-token: ${GEM_INTERNAL_TOKEN:local-dev-internal-token-change-me}
+    jwt:
+      jwk-set-uri: ${GEM_JWT_JWK_SET_URI:http://localhost:8081/oauth2/jwks}
+      issuer: ${AUTH_JWT_ISSUER:http://localhost:8081}
+      audience: ${AUTH_JWT_AUDIENCE:green-eco-mall}

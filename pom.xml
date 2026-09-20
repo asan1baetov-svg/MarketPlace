@@ -27,6 +27,7 @@
 		<module>common/common-events</module>
 		<module>common/common-security</module>
 		<module>common/common-web</module>
+		<module>common/common-test</module>
 		<module>services/auth-service</module>
 		<module>services/catalog-service</module>
 		<module>services/order-service</module>
@@ -57,6 +58,11 @@
 			<dependency>
 				<groupId>greenecomall</groupId>
 				<artifactId>common-web</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>greenecomall</groupId>
+				<artifactId>common-test</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>

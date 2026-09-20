@@ -12,7 +12,7 @@
 2. [Декомпозиция на сервисы](#2-декомпозиция-на-сервисы)
 3. [Схема БД по сервисам](#3-схема-бд-по-сервисам)
 4. [Kafka: топики и события](#4-kafka-топики-и-события)
-5. [Контракт SSO-интеграции с MLM-бэком](#5-контракт-sso-интеграции-с-mlm-бэком)
+5. [Контракт интеграции с внешним MLM-бэком](#5-контракт-интеграции-с-внешним-mlm-бэком)
 6. [Monorepo vs multi-repo](#6-monorepo-vs-multi-repo)
 7. [Docker Compose и GitLab CI/CD](#7-docker-compose-и-gitlab-cicd)
 8. [Риски и открытые вопросы](#8-риски-и-открытые-вопросы)
@@ -581,87 +581,166 @@ device_tokens(id PK, user_id, platform ENUM[ios,android,web], token, created_at)
 
 ---
 
-## 5. Контракт SSO-интеграции с MLM-бэком
+## 5. Контракт интеграции с внешним MLM-бэком
 
-### 5.1 Принцип: антикоррупционный слой
+> **Переписано 2026-09-15** по коду реальной MLM-системы (репозиторий `GreenEcoMall`).
+> Прежний «дефолтный контракт» (OIDC / RS256 + JWKS) не соответствовал действительности.
+> Всё, что помечено **[нужно от MLM]**, во внешней системе пока не реализовано — это
+> список работ для команды MLM-бэка.
 
-Внутри `mlm-service` — модуль `integration` с интерфейсами, **не зависящими** от реального
-протокола MLM-бэка:
+### 5.1 Что представляет собой внешняя система (факты из кода)
 
-```java
-interface MlmIdentityProvider {           // разбор входящего токена
-    MlmIdentity verifyAndExtract(String rawToken);   // подпись, exp, aud, jti
-}
-interface MlmSyncClient {                  // обратная синхронизация
-    void reportActivationStatus(MlmActivationStatus status);
-    void reportPurchase(MlmPurchase purchase);
-}
-record MlmIdentity(String mlmUserId, String referralCode, String uplineMlmUserId,
-                   String accessStatus, String email, String phone, String fullName,
-                   String locale, String countryCode, String city) {}
+| Аспект | Как устроено в GreenEcoMall |
+|---|---|
+| Стек | Spring Boot 3.3.5, один сервис (не микросервисы), Postgres, Flyway; деплой Railway, домен `greenecomall.com` |
+| Аутентификация | **JWT HMAC с общим секретом**: jjwt 0.12.6, `Keys.hmacShaKeyFor(JWT_SECRET)` — алгоритм (HS256/384/512) выбирается по длине ключа. Claims: `sub` = UUID пользователя, `role` (`USER`/`ADMIN`), `type` (`access`/`refresh`/`store`). Нет `iss`/`aud`/`jti`/`kid`, нет JWKS/OIDC |
+| Модель MLM | **Матричная**: у пользователя `currentLevel`/`currentStage`, `RegistrationPlan` (FAST_START / STANDARD / LEVEL_2..4), пригласивший `inviter`, фиксированные партнёры слева/справа, ускорители, `TreePosition` |
+| Статус аккаунта | `AccountStatus` = `PENDING` → `ACTIVE` → `BLOCKED`; `activatedAt` |
+| Входной взнос | `PaymentType.ENTRY_FEE` через **Finik** (RSA-SHA256 подписи): fast-start 20 000, level1 10 000, level2 44 000, level3 176 000, level4 877 000 KGS |
+| Покупки у партнёров | Уже есть модель «партнёрский магазин»: у пользователя `purchaseBalance` (нельзя вывести, только потратить) и одноразовый QR-токен; магазин вызывает `GET /store/client?t=`, `POST /store/purchase`, выплата магазину через Finik |
+| Эндпоинты для маркетплейса | **Нет ни одного** — ни выдачи SSO-токена, ни приёма покупок/статусов |
+
+Вывод: дерево, уровни, взнос и бонусы — **зона ответственности MLM-бэка**. Маркетплейс не
+дублирует матрицу, а (1) принимает пользователя по SSO, (2) считает условие «покупка на X за
+Y дней» по своим заказам, (3) сообщает MLM-бэку о покупках и результате активации.
+
+### 5.2 Антикоррупционный слой (реализовано)
+
+Протокол внешней системы изолирован в двух местах; остальной код видит только внутренние записи.
+
+| Где | Интерфейс / класс | Роль |
+|---|---|---|
+| auth-service | `MlmIdentityProvider` → `MockMlmIdentityProvider` (HMAC, алгоритм настраивается `auth.mlm-sso.algorithm`) | проверка SSO-токена, извлечение `MlmIdentity` |
+| auth-service | `MlmSsoService` | replay-защита по `jti`, создание пользователя с ролью `CLIENT_MLM`, событие `auth.MlmUserLinked` (включая `accessStatus`), выдача внутренних JWT |
+| mlm-service | `ExternalStatusMapper` | `ACTIVE`/`access_paid` → «взнос оплачен»; `PENDING`/`none`/`expired` → «не оплачен»; `BLOCKED` → блок |
+| mlm-service | `MlmSyncClient` → `HttpMlmSyncClient` + `mlm_sync_outbox` + `MlmSyncRelay` | обратная синхронизация с ретраями (экспонента, `mlm.sync.max-attempts`, затем `FAILED` + ручной retry в админке) |
+| mlm-service | `MlmWebhookController` | приём статуса аккаунта от MLM-бэка |
+
+Связь аккаунтов — **событийная**: auth публикует `auth.MlmUserLinked`, mlm-service заводит
+`mlm_accounts` и строит реферальное дерево (closure table, реферер может прийти позже реферала).
+Синхронный `POST /internal/mlm/sso/resolve` из §2.6 не понадобился.
+
+### 5.3 SSO-вход «из MLM на маркетплейс»
+
+```
+Пользователь в кабинете MLM ──► [нужно от MLM] POST /api/marketplace/sso-token   (Bearer: их access-JWT)
+                                   ◄── { token, expiresIn }
+Браузер ──► https://<маркетплейс>/sso?token=...  ──► api-gateway POST /api/auth/sso/mlm {token}
+                                   ◄── внутренние access/refresh JWT маркетплейса (роль CLIENT_MLM)
 ```
 
-Реализации: `JwtHmacMlmIdentityProvider`, `JwtRsaMlmIdentityProvider`, `OidcMlmIdentityProvider`.
-Пока контракт с командой MLM не согласован — работаем против `mock-mlm` (см. раздел 7) по
-описанному ниже дефолту; смена протокола = новая реализация интерфейса, остальные сервисы не
-трогаем.
+**[нужно от MLM]** эндпоинт выдачи короткоживущего одноразового токена. Подписывать
+**отдельным** секретом `MLM_SSO_SHARED_SECRET` (не их `JWT_SECRET`: утечка секрета маркетплейса
+не должна позволять подделывать сессии MLM). Их же токен `type=access` как SSO не принимаем —
+он живёт час и не одноразовый.
 
-### 5.2 Дефолтный контракт (до согласования)
+| claim | обяз. | значение |
+|---|---|---|
+| `iss` | да | `green-eco-mall-mlm` (настраивается `MLM_SSO_ISSUER`) |
+| `aud` | да | `green-eco-mall` |
+| `sub`, `mlm_user_id` | да | UUID пользователя в MLM (`users.id`) |
+| `jti` | да | UUID, одноразовость |
+| `iat`, `exp` | да | срок ≤ 120 с |
+| `referral_code` | нет | `users.referral_code` |
+| `upline_id` | нет | `users.inviter_id` |
+| `access_status` | нет | `users.account_status` (`PENDING`/`ACTIVE`/`BLOCKED`) |
+| `phone`, `email`, `full_name`, `locale` | нет | префилл профиля |
 
-**Рекомендация по способу:** если MLM-бэк может дать OIDC — берём OIDC (`id_token`, discovery,
-JWKS). Если нет — **подписанный JWT RS256** (асимметрия: MLM-бэк подписывает приватным ключом,
-маркетплейс проверяет по JWKS/публичному ключу; HMAC-общий-секрет — только как крайний
-вариант).
+Пример на их стеке (jjwt 0.12.6):
 
-**Входящий токен (SSO).** Пользователь из MLM-системы переходит на маркетплейс со
-`?sso_token=<JWT>` (или заголовком). Токен **короткоживущий (60–120 с), одноразовый**, меняется
-на внутреннюю сессию.
+```java
+Jwts.builder()
+    .issuer("green-eco-mall-mlm").audience().add("green-eco-mall").and()
+    .subject(user.getId().toString()).claim("mlm_user_id", user.getId().toString())
+    .id(UUID.randomUUID().toString())
+    .issuedAt(now).expiration(Date.from(now.toInstant().plusSeconds(120)))
+    .claim("referral_code", user.getReferralCode())
+    .claim("upline_id", user.getInviter() == null ? null : user.getInviter().getId().toString())
+    .claim("access_status", user.getAccountStatus().name())
+    .claim("phone", user.getPhone())
+    .signWith(Keys.hmacShaKeyFor(ssoSecret.getBytes(UTF_8)))   // ≥64 байт → HS512
+    .compact();
+```
 
-- Заголовок: `alg=RS256`, `kid`.
-- Claims:
-  | claim | обяз. | описание |
-  |---|---|---|
-  | `iss` | да | идентификатор MLM-бэка |
-  | `aud` | да | `"green-eco-mall"` |
-  | `sub` / `mlm_user_id` | да | стабильный внешний ID пользователя |
-  | `jti` | да | одноразовость (лог в `mlm_sso_token_log`) |
-  | `iat`, `exp` | да | срок ≤ 120 с, допуск по часам ≤ 60 с |
-  | `referral_code` | нет | личный реф-код пользователя |
-  | `upline_id` / `upline_mlm_user_id` | нет | реферер (для построения дерева) |
-  | `access_status` | нет | `none / access_paid / active / expired` на стороне MLM |
-  | `email`, `phone`, `full_name` | нет | префилл профиля |
-  | `locale`, `country_code`, `city` | нет | префилл гео |
+На стороне маркетплейса алгоритм задаётся `MLM_SSO_ALGORITHM` (HS256/HS384/HS512) и должен
+совпасть с длиной их секрета.
 
-- Валидация: подпись по JWKS (`GET {mlm_issuer}/.well-known/jwks.json`, кэш с TTL),
-  `iss`/`aud`/`exp`/`nbf`, `jti` не встречался.
-- Успех → `POST /internal/mlm/sso/resolve` (auth → mlm): найти `mlm_account` по `mlm_user_id`,
-  иначе создать `user` (роль `CLIENT_MLM`, `client_type=internal_mlm`) + `mlm_account`
-  (+ ветка дерева по `upline_id`). auth выдаёт внутренний access/refresh JWT.
+### 5.4 Маркетплейс → MLM-бэк (обратная синхронизация)
 
-**Обратная синхронизация (маркетплейс → MLM-бэк).** Через `mlm_sync_outbox`, ретраи с
-экспонентой, HMAC-подпись тела:
+Отправляет mlm-service из `mlm_sync_outbox`. Базовый URL — `MLM_BACKEND_BASE_URL`; пока не задан,
+сообщения копятся и уйдут после настройки. Заголовки на каждом запросе:
 
-- `POST {mlm_base}/api/marketplace/activation`
-  ```json
-  { "mlmUserId": "...", "status": "CONDITION_MET|ACTIVATED|EXPIRED",
-    "achievedAmountMinor": 1500000, "currency": "KGS",
-    "occurredAt": "...", "marketplaceOrderIds": ["..."] }
-  ```
-- `POST {mlm_base}/api/marketplace/purchases`
-  ```json
-  { "mlmUserId": "...", "orderId": "...", "amountMinor": 250000, "currency": "KGS",
-    "occurredAt": "...", "itemsSummary": [{ "category": "...", "amountMinor": 250000 }] }
-  ```
-- Заголовки: `X-Signature: hmac-sha256(secret, timestamp + "." + body)`, `X-Timestamp`,
-  `X-Idempotency-Key: {outboxId}`.
+- `X-Timestamp` — unix-секунды;
+- `X-Signature` — `hex(HMAC-SHA256(MLM_SYNC_SHARED_SECRET, X-Timestamp + "." + body))`;
+- `X-Idempotency-Key` — id сообщения outbox (повтор не должен задваивать обработку).
 
-**Источник истины (R9):** маркетплейс считает «покупка на X за Y» и шлёт `activation`;
-реферальные бонусы — на стороне MLM-бэка (тогда нужны `purchases`), либо на нашей (тогда
-`purchases` не обязателен). **Согласовать с командой MLM.**
+Любой ответ не-2xx → повтор с экспоненциальной задержкой.
 
-**Открытые вопросы к команде MLM (R10, R11):** OIDC или подписанный JWT; RS256/JWKS или
-HMAC-секрет; точный список claim'ов; эндпоинты и аутентификация обратных вызовов; кто считает
-активацию; нужны ли им наши `purchases`.
+**[нужно от MLM]** `POST /api/marketplace/purchases` — на каждую оплаченную (и отменённую)
+покупку MLM-клиента:
+```json
+{ "mlmUserId": "b3c1…", "orderId": "7f2e…", "amountMinor": 250000, "currency": "KGS",
+  "status": "PAID", "occurredAt": "2026-09-15T10:15:30Z" }
+```
+`status`: `PAID` | `REVERSED` (отмена/возврат ранее сообщённой покупки). Для этого им нужна
+таблица с уникальным `orderId` — отсюда они начисляют бонусы по своей матрице.
+
+**[нужно от MLM]** `POST /api/marketplace/activation` — результат окна активации:
+```json
+{ "mlmUserId": "b3c1…", "status": "CONDITION_MET", "achievedAmountMinor": 600000,
+  "requiredAmountMinor": 500000, "currency": "KGS", "occurredAt": "…",
+  "marketplaceOrderIds": ["7f2e…"] }
+```
+`status`: `CONDITION_MET` (купил на X в срок) | `EXPIRED` (не успел).
+
+### 5.5 MLM-бэк → маркетплейс (входящий webhook, реализовано)
+
+**[нужно от MLM]** вызывать при оплате входного взноса через Finik и при блокировке:
+
+`POST {api-gateway}/api/webhooks/mlm/account-status` — та же схема подписи (`X-Timestamp`,
+`X-Signature`, секрет `MLM_SYNC_SHARED_SECRET`), допуск по часам ±5 минут.
+```json
+{ "mlmUserId": "b3c1…", "status": "ACTIVE", "tariffId": null }
+```
+`ACTIVE` открывает окно «покупка на X за Y дней» по тарифу (дефолтному, если `tariffId` не задан);
+`BLOCKED` блокирует MLM-функции. Тот же статус приходит и в SSO-токене при первом входе.
+
+### 5.6 Кто за что отвечает
+
+| Что | Маркетплейс | MLM-бэк |
+|---|---|---|
+| Регистрация MLM-пользователя, пароль, OTP | — | ✅ |
+| Вход на маркетплейс | проверка SSO-токена, аккаунт `CLIENT_MLM` | выдача SSO-токена |
+| Входной взнос | опционально `POST /api/payments/mlm-access` (если решат принимать на маркетплейсе) | ✅ Finik (сейчас) |
+| Условие «покупка на X за Y» | ✅ считает по своим заказам, дедлайн, напоминания за 3 и 1 день | получает `activation` |
+| Дерево / уровни / этапы | зеркало по `upline_id` (closure table) — для кабинета и отчётов | ✅ источник истины |
+| Реферальные бонусы | выключены (`MLM_LOCAL_BONUSES_ENABLED=false`) | ✅ по `purchases` |
+| Товары, заказы, доставка, выплаты магазинам | ✅ | — |
+
+### 5.7 Открытые вопросы к команде MLM
+
+1. Согласны ли на отдельный секрет SSO и какой длины (HS256 или HS512)?
+2. Значения X и Y для условия активации — одинаковы для всех `RegistrationPlan` или зависят от
+   уровня (тогда `tariffId` в webhook = план)? Сейчас тариф один: 5 000 KGS за 30 дней.
+3. Что делает MLM при `EXPIRED`: блок, повторный взнос, сгорание? Маркетплейс сейчас
+   переводит аккаунт в `EXPIRED`, повторный `ACTIVE` перезапускает окно.
+4. Засчитывать ли покупку по оплате (сейчас) или только по факту доставки?
+5. Должен ли маркетплейс принимать оплату через `purchaseBalance` клиента? Если да — нужен
+   эндпоинт списания/резерва с их стороны и отдельный платёжный провайдер в finance-service.
+6. Нужны ли им данные о составе покупки (категории) для расчёта бонусов?
+
+### 5.8 Проверка локально
+
+`infra/mock-mlm` (порт 9100) изображает MLM-бэк по этому контракту:
+
+```bash
+# 1. SSO-токен и вход
+TOKEN=$(curl -s "localhost:9100/sso/issue-token?mlm_user_id=U1&access_status=ACTIVE" | jq -r .token)
+curl -s -XPOST localhost:8080/api/auth/sso/mlm -H 'Content-Type: application/json' -d "{\"token\":\"$TOKEN\"}"
+# 2. Имитация оплаты взноса на стороне MLM → подписанный webhook в mlm-service
+curl -s -XPOST "localhost:9100/sim/account-status?mlm_user_id=U1&status=ACTIVE"
+# 3. Обратные вызовы маркетплейса видны в логе mock-mlm с проверкой подписи
+```
 
 ---
 
@@ -875,6 +954,29 @@ deploy:prod:
 ---
 
 ## 9. Порядок реализации
+
+> **Статус на 2026-09-15.** Этапы 0–9 реализованы на уровне бэкенда (сборка зелёная, юнит-тесты
+> зелёные; интеграционные тесты на Testcontainers написаны, но в dev-окружении не запускались —
+> см. «Известные ограничения» ниже).
+>
+> | Этап | Статус |
+> |---|---|
+> | 1 auth + api-gateway | ✅ + реверс-прокси `/api/**` → сервисы (`RouteTable`), роль ADMIN на `/api/admin/**` |
+> | 2 catalog | ✅ гео, категории, магазины, товары, наценка, остатки, витрина |
+> | 3 order | ✅ корзина одного города, checkout → suborders, резерв, FSM, таймаут неоплаты, промокоды |
+> | 4 finance/payment | ✅ платёж по `OrderCreated`, mock-эквайринг + подписанный webhook, `OrderPaid`/`PaymentFailed`/`MlmAccessPaid`, возвраты |
+> | 5 finance/wallet | ✅ ledger с идемпотентными проводками, распределение по плану из `OrderCreated`, выплаты с hold, вознаграждение курьеру |
+> | 6 courier | ✅ модерация, подбор (загрузка → рейтинг), офферы с TTL, `NoCourierAvailable`, статусы доставки, заработок |
+> | 7 notification | ✅ шаблоны, настройки каналов, read-model получателей, логирующие шлюзы push/SMS/Telegram |
+> | 8–9 mlm | ✅ по реальному MLM-бэку — см. §5: окно активации, зачёт заказов, просрочка/напоминания, дерево, outbox синхронизации, входящий webhook |
+> | 10 админка/BFF | частично: админ-эндпоинты в каждом сервисе, агрегации в гейтвее нет |
+> | 11 харденинг | не начат |
+>
+> **Известные ограничения / следующий шаг:** JWT-проверка внутри сервисов (сейчас доверяют
+> гейтвею, `callerUserId` в теле); `X-Internal-Token` на `/internal/**`; реальные шлюзы
+> SMS/Telegram/FCM и эквайринга (Finik); Redis-кэш цены; DLT для консюмеров; Testcontainers
+> 1.20.x не видит Docker Desktop 29 — поднять версию или запускать CI в `docker:dind`.
+
 
 Денежный путь MVP: **auth → catalog → order → finance(payment) → finance(wallet) → courier**.
 MLM — отдельная фаза после того, как внешний клиент может купить и получить доставку.
