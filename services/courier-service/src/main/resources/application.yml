@@ -1,6 +1,8 @@
 server:
   # PORT задаёт хостинг (Railway/Heroku), SERVER_PORT — локальный запуск
   port: ${PORT:${SERVER_PORT:8085}}
+  # внутренняя сеть Railway работает по IPv6: SERVER_ADDRESS=::
+  address: ${SERVER_ADDRESS:0.0.0.0}
 
 spring:
   application:
