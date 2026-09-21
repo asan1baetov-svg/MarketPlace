@@ -44,7 +44,7 @@ class TokenServiceTest {
     void setUp() {
         Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
         AuthProperties props = new AuthProperties(
-                null, new AuthProperties.Refresh(Duration.ofDays(30)), null, null, null, null);
+                null, new AuthProperties.Refresh(Duration.ofDays(30)), null, null, null, null, null);
         tokenService = new TokenService(accessTokenIssuer, refreshTokens, mlmIdentities, props, clock);
         user = User.forLocalRegistration("client@example.com", null, "hash", "ru");
 

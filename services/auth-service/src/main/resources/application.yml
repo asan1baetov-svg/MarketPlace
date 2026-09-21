@@ -49,6 +49,11 @@ auth:
     algorithm: ${MLM_SSO_ALGORITHM:HS256}
   outbox:
     poll-interval: 2s
+  bootstrap-admin:
+    # первый вход в админку: задать обе переменные при первом запуске, потом сменить пароль
+    email: ${ADMIN_EMAIL:}
+    password: ${ADMIN_PASSWORD:}
+    super-admin: ${ADMIN_SUPER:true}
   internal:
     token: ${AUTH_INTERNAL_TOKEN:${GEM_INTERNAL_TOKEN:local-dev-internal-token-change-me}}
 

@@ -48,7 +48,7 @@ class OtpServiceTest {
         AuthProperties props = new AuthProperties(
                 null, null,
                 new AuthProperties.Otp(Duration.ofMinutes(5), Duration.ofSeconds(60), 6),
-                null, null, null);
+                null, null, null, null);
         otpService = new OtpService(codes, sender, props, clock);
     }
 

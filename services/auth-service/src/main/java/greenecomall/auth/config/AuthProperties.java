@@ -8,9 +8,18 @@ import java.time.Duration;
  * Настройки auth-service (префикс {@code auth} в application.yml).
  */
 @ConfigurationProperties(prefix = "auth")
-public record AuthProperties(Jwt jwt, Refresh refresh, Otp otp, MlmSso mlmSso, Outbox outbox, Internal internal) {
+public record AuthProperties(Jwt jwt, Refresh refresh, Otp otp, MlmSso mlmSso, Outbox outbox, Internal internal,
+                             BootstrapAdmin bootstrapAdmin) {
 
     public record Jwt(String issuer, String audience, Duration accessTokenTtl) {
+    }
+
+    /**
+     * Первый администратор, создаётся при старте, если такого email ещё нет (см. {@code BootstrapAdmin}).
+     *
+     * @param superAdmin выдать ещё и роль SUPER_ADMIN
+     */
+    public record BootstrapAdmin(String email, String password, boolean superAdmin) {
     }
 
     public record Refresh(Duration ttl) {
