@@ -1,5 +1,6 @@
 server:
-  port: ${SERVER_PORT:8085}
+  # PORT задаёт хостинг (Railway/Heroku), SERVER_PORT — локальный запуск
+  port: ${PORT:${SERVER_PORT:8085}}
 
 spring:
   application:
@@ -41,6 +42,8 @@ management:
         enabled: true
 
 courier:
+  order-base-url: ${ORDER_BASE_URL:http://localhost:8083}
+  catalog-base-url: ${CATALOG_BASE_URL:http://localhost:8082}
   offer-ttl: 2m
   redispatch-interval: 30s
   delivery-fee-minor: ${COURIER_DELIVERY_FEE_MINOR:15000}

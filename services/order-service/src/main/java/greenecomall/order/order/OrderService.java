@@ -171,6 +171,13 @@ public class OrderService {
         return suborders.findByOrderId(orderId);
     }
 
+    /** Данные для доставки посылки: адрес клиента и состав — их показывает приложение курьера. */
+    @Transactional(readOnly = true)
+    public Suborder requireSuborder(UUID suborderId) {
+        return suborders.findById(suborderId)
+                .orElseThrow(() -> new DomainException(OrderErrors.SUBORDER_NOT_FOUND, "suborder not found: " + suborderId));
+    }
+
     @Transactional(readOnly = true)
     public List<SuborderItem> suborderItems(UUID suborderId) {
         return suborderItems.findBySuborderId(suborderId);

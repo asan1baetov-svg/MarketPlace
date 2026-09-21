@@ -138,4 +138,24 @@ class GatewaySecurityConfigTest {
         org.assertj.core.api.Assertions.assertThat(greenecomall.gateway.routing.RouteTable.resolve("/admin/wallets"))
                 .hasValueSatisfying(r -> org.assertj.core.api.Assertions.assertThat(r.service()).isEqualTo("finance"));
     }
+
+    @Test
+    void browserPreflight_isAllowedWithoutToken() {
+        client.options().uri("/api/auth/login")
+                .header("Origin", "https://shop.greenecomall.kg")
+                .header("Access-Control-Request-Method", "POST")
+                .header("Access-Control-Request-Headers", "authorization,content-type")
+                .exchange()
+                .expectStatus().is2xxSuccessful()
+                .expectHeader().valueEquals("Access-Control-Allow-Origin", "https://shop.greenecomall.kg");
+    }
+
+    @Test
+    void crossOriginResponse_carriesCorsHeader() {
+        client.get().uri("/api/catalog/products?cityId=1")
+                .header("Origin", "https://shop.greenecomall.kg")
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().valueEquals("Access-Control-Allow-Origin", "https://shop.greenecomall.kg");
+    }
 }

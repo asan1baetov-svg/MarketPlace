@@ -10,6 +10,6 @@ import java.util.UUID;
  * Владелец магазина — пользователь из access-JWT.
  */
 public record ShopRegisterRequest(
-        @NotBlank String name, String legalInfo,
+        @NotBlank String name, String legalInfo, String address, String phone,
         @NotNull UUID countryId, @NotNull UUID cityId) {
 }

@@ -41,17 +41,28 @@ public class ShopService {
     }
 
     @Transactional
-    public UUID register(UUID ownerUserId, String name, String legalInfo, UUID countryId, UUID cityId) {
+    public UUID register(UUID ownerUserId, String name, String legalInfo, String address, String phone,
+                         UUID countryId, UUID cityId) {
         Country country = countries.findById(countryId)
                 .orElseThrow(() -> new DomainException(CatalogErrors.COUNTRY_NOT_FOUND, "country not found: " + countryId));
         City city = cities.findById(cityId)
                 .orElseThrow(() -> new DomainException(CatalogErrors.CITY_NOT_FOUND, "city not found: " + cityId));
-        return shops.save(new Shop(ownerUserId, name, legalInfo, country, city)).getId();
+        Shop shop = new Shop(ownerUserId, name, legalInfo, country, city);
+        shop.updateProfile(name, legalInfo, address, phone);
+        return shops.save(shop).getId();
     }
 
     @Transactional(readOnly = true)
     public Shop get(UUID id) {
         return requireShop(id);
+    }
+
+    /** Профиль магазина меняет владелец (или админ): название, реквизиты, адрес забора, телефон. */
+    @Transactional
+    public Shop updateProfile(UUID id, String name, String legalInfo, String address, String phone) {
+        Shop shop = requireShop(id);
+        shop.updateProfile(name, legalInfo, address, phone);
+        return shop;
     }
 
     @Transactional(readOnly = true)

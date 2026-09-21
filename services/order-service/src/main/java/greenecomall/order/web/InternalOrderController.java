@@ -6,6 +6,7 @@ import greenecomall.order.order.OrderService;
 import greenecomall.order.order.SuborderWorkflow;
 import greenecomall.order.web.dto.InternalSuborderStatusRequest;
 import greenecomall.order.web.dto.OrderResponse;
+import greenecomall.order.web.dto.SuborderDeliveryResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 import java.util.Map;
@@ -31,10 +33,12 @@ public class InternalOrderController {
 
     private final OrderService orderService;
     private final SuborderWorkflow workflow;
+    private final ObjectMapper objectMapper;
 
-    public InternalOrderController(OrderService orderService, SuborderWorkflow workflow) {
+    public InternalOrderController(OrderService orderService, SuborderWorkflow workflow, ObjectMapper objectMapper) {
         this.orderService = orderService;
         this.workflow = workflow;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping("/orders/{id}")
@@ -49,6 +53,15 @@ public class InternalOrderController {
     @GetMapping("/purchases/received")
     public Map<String, Boolean> received(@RequestParam UUID clientUserId, @RequestParam UUID productId) {
         return Map.of("received", orderService.hasReceived(clientUserId, productId));
+    }
+
+    /** Для приложения курьера: адрес доставки, состав и сумма посылки. */
+    @GetMapping("/suborders/{id}/delivery")
+    public SuborderDeliveryResponse delivery(@PathVariable UUID id) {
+        Suborder suborder = orderService.requireSuborder(id);
+        Order order = orderService.get(suborder.getOrderId());
+        return SuborderDeliveryResponse.of(suborder, order, orderService.suborderItems(id),
+                objectMapper.readTree(order.getDeliveryAddress()));
     }
 
     @PostMapping("/suborders/{id}/status")

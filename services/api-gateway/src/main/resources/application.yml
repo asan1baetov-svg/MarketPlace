@@ -1,5 +1,6 @@
 server:
-  port: ${SERVER_PORT:8080}
+  # PORT задаёт хостинг (Railway/Heroku), SERVER_PORT — локальный запуск
+  port: ${PORT:${SERVER_PORT:8080}}
 
 spring:
   application:
@@ -22,6 +23,9 @@ management:
         enabled: true
 
 gateway:
+  cors:
+    # домены фронтов через запятую; * — любой (токен ходит в заголовке, не в cookie)
+    allowed-origins: ${GATEWAY_CORS_ORIGINS:*}
   response-timeout: 30s
   services:
     auth: ${GATEWAY_AUTH_URL:http://localhost:8081}

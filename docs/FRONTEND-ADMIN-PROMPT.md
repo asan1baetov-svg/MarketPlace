@@ -109,7 +109,8 @@
 
 ## 5. Технические требования
 
-- Вход: `POST /api/auth/login` (email/телефон + пароль). После входа `GET /api/auth/me`:
+- Вход: `POST /api/auth/login` (email/телефон + пароль); в dev-окружении первый админ —
+  `admin@greenecomall.kg` / `admin12345` (заводится бэкендом при старте). После входа `GET /api/auth/me`:
   если в `roles` нет `ADMIN` или `SUPER_ADMIN` — выход и сообщение «Доступ только для сотрудников».
 - Access-токен в памяти, refresh в `localStorage`, автоматическое обновление по 401 с одной общей
   очередью запросов; `auth.refresh_reused` или 401 на refresh — выход.

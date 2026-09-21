@@ -1,5 +1,6 @@
 server:
-  port: ${SERVER_PORT:8084}
+  # PORT задаёт хостинг (Railway/Heroku), SERVER_PORT — локальный запуск
+  port: ${PORT:${SERVER_PORT:8084}}
 
 spring:
   application:

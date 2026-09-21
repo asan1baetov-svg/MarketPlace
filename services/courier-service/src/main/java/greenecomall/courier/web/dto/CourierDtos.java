@@ -65,6 +65,20 @@ public final class CourierDtos {
         }
     }
 
+    /** Карточка доставки для курьера: статус, откуда забрать, куда везти, что внутри. */
+    public record DeliveryDetailsResponse(DeliveryResponse delivery, Pickup pickup, Dropoff dropoff) {
+
+        public record Pickup(String shopName, String address, String phone) {
+        }
+
+        public record Dropoff(tools.jackson.databind.JsonNode address, long amountMinor, String currency,
+                              String orderStatus, List<Item> items) {
+        }
+
+        public record Item(String name, int qty) {
+        }
+    }
+
     public record EarningsResponse(UUID courierId, Instant from, Instant to, long totalMinor, List<Item> items) {
 
         public record Item(UUID suborderId, long amountMinor, String currency, Instant createdAt) {

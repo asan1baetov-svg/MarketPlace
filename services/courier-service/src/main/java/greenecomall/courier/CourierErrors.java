@@ -12,6 +12,7 @@ public final class CourierErrors {
     public static final String JOB_STATUS_INVALID = "courier.job_status_invalid";
     public static final String JOB_FORBIDDEN = "courier.job_forbidden";
     public static final String JOB_NOT_READY_FOR_PICKUP = "courier.job_not_ready_for_pickup";
+    public static final String ORDER_UNAVAILABLE = "courier.order_unavailable";
 
     private CourierErrors() {
     }

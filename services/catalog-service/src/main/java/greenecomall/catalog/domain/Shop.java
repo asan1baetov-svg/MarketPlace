@@ -32,6 +32,13 @@ public class Shop {
     @Column(name = "owner_user_id", nullable = false, updatable = false)
     private UUID ownerUserId;
 
+    /** Адрес, по которому курьер забирает заказ. */
+    @Column(length = 300)
+    private String address;
+
+    @Column(length = 20)
+    private String phone;
+
     @Column(nullable = false, length = 200)
     private String name;
 
@@ -143,5 +150,21 @@ public class Shop {
     public void applyRating(BigDecimal rating, int reviewsCount) {
         this.rating = rating;
         this.reviewsCount = reviewsCount;
+    }
+
+    /** Профиль магазина: что владелец может менять сам (название и реквизиты — до модерации). */
+    public void updateProfile(String name, String legalInfo, String address, String phone) {
+        this.name = name;
+        this.legalInfo = legalInfo;
+        this.address = address;
+        this.phone = phone;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+
+    public String getPhone() {
+        return phone;
     }
 }

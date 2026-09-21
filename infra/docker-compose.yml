@@ -61,6 +61,9 @@ services:
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth
+      # первый вход в админку; на проде задать свои значения и сменить пароль после входа
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@greenecomall.kg}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345}
     ports: ["8081:8081"]
     depends_on: *service-depends
 
@@ -103,6 +106,8 @@ services:
     environment:
       <<: *service-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/courier
+      ORDER_BASE_URL: http://order-service:8083
+      CATALOG_BASE_URL: http://catalog-service:8082
     ports: ["8085:8085"]
     depends_on: *service-depends
 

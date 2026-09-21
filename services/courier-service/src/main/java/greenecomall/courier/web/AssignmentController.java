@@ -3,8 +3,10 @@ package greenecomall.courier.web;
 import greenecomall.common.security.AuthPrincipal;
 import greenecomall.common.web.security.Authz;
 import greenecomall.courier.courier.CourierService;
+import greenecomall.courier.delivery.DeliveryDetailsClient;
 import greenecomall.courier.dispatch.DispatchService;
 import greenecomall.courier.domain.DeliveryJob;
+import greenecomall.courier.web.dto.CourierDtos.DeliveryDetailsResponse;
 import greenecomall.courier.web.dto.CourierDtos.DeliveryResponse;
 import greenecomall.courier.web.dto.CourierDtos.FailRequest;
 import jakarta.validation.Valid;
@@ -31,19 +33,28 @@ public class AssignmentController {
 
     private final DispatchService dispatch;
     private final CourierService couriers;
+    private final DeliveryDetailsClient details;
 
-    public AssignmentController(DispatchService dispatch, CourierService couriers) {
+    public AssignmentController(DispatchService dispatch, CourierService couriers, DeliveryDetailsClient details) {
         this.dispatch = dispatch;
         this.couriers = couriers;
+        this.details = details;
     }
 
     @GetMapping
-    public DeliveryResponse get(@PathVariable UUID suborderId, AuthPrincipal principal) {
+    public DeliveryDetailsResponse get(@PathVariable UUID suborderId, AuthPrincipal principal) {
         DeliveryJob job = dispatch.get(suborderId);
         if (!Authz.isAdmin(principal) && !courierId(principal).equals(job.getCourierId())) {
             throw new AccessDeniedException("delivery is assigned to another courier");
         }
-        return DeliveryResponse.from(job);
+        DeliveryDetailsClient.Dropoff dropoff = details.dropoff(suborderId);
+        DeliveryDetailsResponse.Pickup pickup = details.pickup(job.getShopId())
+                .map(p -> new DeliveryDetailsResponse.Pickup(p.shopName(), p.address(), p.phone()))
+                .orElse(null);
+        return new DeliveryDetailsResponse(DeliveryResponse.from(job), pickup,
+                new DeliveryDetailsResponse.Dropoff(dropoff.address(), dropoff.amountMinor(), dropoff.currency(),
+                        dropoff.orderStatus(),
+                        dropoff.items().stream().map(i -> new DeliveryDetailsResponse.Item(i.name(), i.qty())).toList()));
     }
 
     @PostMapping("/accept")

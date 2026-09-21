@@ -41,6 +41,7 @@ public class InternalCatalogController {
         this.shopService = shopService;
     }
 
+    /** Магазин для других сервисов: владелец (проверка доступа) + адрес и телефон (забор заказа курьером). */
     @GetMapping("/shops/{id}")
     public InternalShopResponse shop(@PathVariable UUID id) {
         return InternalShopResponse.from(shopService.get(id));
