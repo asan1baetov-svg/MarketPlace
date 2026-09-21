@@ -1,0 +1,6 @@
+.git
+.idea
+**/target
+**/node_modules
+docs
+infra/mock-mlm/__pycache__
